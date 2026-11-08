@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gaming Center</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel-bg: #1e293b;
+      --card-bg: #334155;
+      --card-hover: #475569;
+      --accent: #6366f1;
+      --accent-soft: #818cf8;
+      --accent-red: #ef4444;
+      --accent-green: #10b981;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #475569;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; padding: 24px; user-select: none; }
+    header { text-align: center; margin-bottom: 28px; }
+    h1 { font-size: 2.2rem; color: var(--text); font-weight: 700; letter-spacing: 0.5px; }
+    .subtitle { color: var(--text-muted); font-size: 0.95rem; margin-top: 4px; }
+    .stats { display: flex; justify-content: center; gap: 16px; margin-top: 16px; }
+    .stat-box { background: var(--panel-bg); padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border); font-size: 0.9rem; color: var(--text-muted); }
+    .stat-box strong { color: var(--text); font-weight: 600; }
+    
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto; }
+    .card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 10px; padding: 20px; text-align: left; cursor: pointer; transition: background 0.2s, border-color 0.2s; }
+    .card:hover { background: var(--card-hover); border-color: var(--accent-soft); }
+    .card h3 { color: var(--text); margin-bottom: 8px; font-size: 1.15rem; font-weight: 600; }
+    .card p { color: var(--text-muted); font-size: 0.88rem; line-height: 1.4; }
+    
+    /* Overlay Modal */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.94); justify-content: center; align-items: center; flex-direction: column; z-index: 100; padding: 20px; }
+    .modal.active { display: flex; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; width: 600px; max-width: 95vw; margin-bottom: 12px; }
+    .modal-header h2 { color: var(--text); font-size: 1.3rem; font-weight: 600; }
+    canvas { background: #0f172a; border: 1px solid var(--border); border-radius: 8px; max-width: 95vw; max-height: 65vh; }
+    
+    .btn { background: var(--accent); color: white; border: none; padding: 8px 16px; font-weight: 500; font-size: 0.9rem; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+    .btn:hover { background: var(--accent-soft); }
+    .btn-secondary { background: var(--card-bg); color: var(--text); }
+    .btn-secondary:hover { background: var(--card-hover); }
+
+    .touch-controls { display: flex; gap: 10px; margin-top: 12px; }
+    .touch-btn { background: var(--card-bg); border: 1px solid var(--border); color: var(--text); width: 50px; height: 45px; border-radius: 6px; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .touch-btn:active { background: var(--accent); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Gaming Center</h1>
+    <p class="subtitle">Select a mini-game to play</p>
+    <div class="stats">
+      <div class="stat-box">Games Available: <strong>6</strong></div>
+      <div class="stat-box">High Score: <strong id="total-score">0</strong></div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card" onclick="launchGame('striker')">
+      <h3>🚀 Space Shooter</h3>
+      <p>Defend against incoming alien formations with rapid lasers.</p>
+    </div>
+    <div class="card" onclick="launchGame('snake')">
+      <h3>🐍 Classic Snake</h3>
+      <p>Navigate the grid, collect food targets, and grow your tail.</p>
+    </div>
+    <div class="card" onclick="launchGame('2048')">
+      <h3>🧩 Tile 2048</h3>
+      <p>Slide and combine matching numbered tiles to hit 2048.</p>
+    </div>
+    <div class="card" onclick="launchGame('breaker')">
+      <h3>🧱 Brick Breaker</h3>
+      <p>Clear brick arrangements with precise paddle bounces.</p>
+    </div>
+    <div class="card" onclick="launchGame('match')">
+      <h3>🎴 Memory Match</h3>
+      <p>Test memory recall by matching icon pairs in fewest moves.</p>
+    </div>
+    <div class="card" onclick="launchGame('pong')">
+      <h3>🏓 Table Tennis</h3>
+      <p>Rally against an adaptive AI paddle opponent.</p>
+    </div>
+  </div>
+
+  <div class="modal" id="game-modal">
+    <div class="modal-header">
+      <h2 id="game-title">Game Title</h2>
+      <button class="btn btn-secondary" onclick="closeGame()">Exit</button>
+    </div>
+    <canvas id="arcadeCanvas" width="600" height="400"></canvas>
+    
+    <div class="touch-controls" id="touch-panel">
+      <button class="touch-btn" onclick="triggerKey('ArrowLeft')">◄</button>
+      <button class="touch-btn" onclick="triggerKey(' ')">💥</button>
+      <button class="touch-btn" onclick="triggerKey('ArrowRight')">►</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('arcadeCanvas');
+    const ctx = canvas.getContext('2d');
+    const modal = document.getElementById('game-modal');
+    const titleEl = document.getElementById('game-title');
+    const totalScoreEl = document.getElementById('total-score');
+    let loopId = null;
+    let gameScores = JSON.parse(localStorage.getItem('gc_scores') || '{}');
+    
+    function updateHighScoreDisplay() {
+      const top = Math.max(0, ...Object.values(gameScores));
+      totalScoreEl.innerText = top;
+    }
+    updateHighScoreDisplay();
+
+    function saveScore(key, val) {
+      if (!gameScores[key] || val > gameScores[key]) {
+        gameScores[key] = val;
+        localStorage.setItem('gc_scores', JSON.stringify(gameScores));
+        updateHighScoreDisplay();
+      }
+    }
+
+    // Low-volume web synthesizer audio
+    function playSound(freq, duration = 0.08) {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch(e){}
+    }
+
+    let currentInputHandler = null;
+    function triggerKey(keyName) {
+      if (currentInputHandler) currentInputHandler(keyName);
+    }
+
+    function launchGame(gameKey) {
+      modal.classList.add('active');
+      if (loopId) clearInterval(loopId);
+
+      if (gameKey === 'striker') initStriker();
+      else if (gameKey === 'snake') initSnake();
+      else if (gameKey === 'breaker') initBreaker();
+      else if (gameKey === 'pong') initPong();
+      else if (gameKey === '2048') init2048();
+      else if (gameKey === 'match') initMatch();
+    }
+
+    function closeGame() {
+      modal.classList.remove('active');
+      if (loopId) clearInterval(loopId);
+      canvas.onclick = null;
+    }
+
+    /* --- GAME 1: SPACE SHOOTER --- */
+    function initStriker() {
+      titleEl.innerText = "🚀 Space Shooter";
+      let pX = 280, bullets = [], enemies = [], score = 0;
+      const keys = {};
+      
+      window.onkeydown = e => keys[e.key] = true;
+      window.onkeyup = e => keys[e.key] = false;
+      currentInputHandler = k => {
+        if (k === 'ArrowLeft') pX = Math.max(0, pX - 25);
+        if (k === 'ArrowRight') pX = Math.min(560, pX + 25);
+        if (k === ' ') { bullets.push({x: pX + 18, y: 360}); playSound(440); }
+      };
+
+      loopId = setInterval(() => {
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, 600, 400);
+        
+        if (keys['ArrowLeft'] && pX > 0) pX -= 5;
+        if (keys['ArrowRight'] && pX < 560) pX += 5;
+        if (keys[' '] && bullets.length < 4) {
+          bullets.push({x: pX + 18, y: 360});
+          playSound(440);
+          keys[' '] = false;
+        }
+
+        ctx.fillStyle = '#6366f1';
+        ctx.fillRect(pX, 370, 40, 12);
+
+        ctx.fillStyle = '#38bdf8';
+        bullets.forEach((b, i) => {
+          b.y -= 7;
+          ctx.fillRect(b.x, b.y, 4, 8);
+          if (b.y < 0) bullets.splice(i, 1);
+        });
+
+        if (Math.random() < 0.035) enemies.push({x: Math.random() * 560, y: 0});
+        ctx.fillStyle = '#94a3b8';
+        enemies.forEach((e, ei) => {
+          e.y += 2;
+          ctx.fillRect(e.x, e.y, 30, 18);
+          
+          bullets.forEach((b, bi) => {
+            if (b.x > e.x && b.x < e.x + 30 && b.y > e.y && b.y < e.y + 18) {
+              enemies.splice(ei, 1);
+              bullets.splice(bi, 1);
+              score += 10;
+              saveScore('striker', score);
+              playSound(250);
+            }
+          });
+        });
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '14px sans-serif';
+        ctx.fillText(`Score: ${score}`, 15, 25);
+      }, 1000/60);
+    }
+
+    /* --- GAME 2: CLASSIC SNAKE --- */
+    function initSnake() {
+      titleEl.innerText = "🐍 Classic Snake";
+      let snake = [{x: 10, y: 10}], dir = {x: 1, y: 0}, food = {x: 5, y: 5}, score = 0;
+      
+      const handleMove = k => {
+        if ((k === 'ArrowUp' || k === 'w') && dir.y === 0) dir = {x: 0, y: -1};
+        if ((k === 'ArrowDown' || k === 's') && dir.y === 0) dir = {x: 0, y: 1};
+        if ((k === 'ArrowLeft' || k === 'a') && dir.x === 0) dir = {x: -1, y: 0};
+        if ((k === 'ArrowRight' || k === 'd') && dir.x === 0) dir = {x: 1, y: 0};
+      };
+      window.onkeydown = e => handleMove(e.key);
+      currentInputHandler = handleMove;
+
+      loopId = setInterval(() => {
+        const head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};
+        if (head.x < 0 || head.x >= 30 || head.y < 0 || head.y >= 20) return launchGame('snake');
+        
+        snake.unshift(head);
+        if (head.x === food.x && head.y === food.y) {
+          score += 10;
+          saveScore('snake', score);
+          food = {x: Math.floor(Math.random() * 30), y: Math.floor(Math.random() * 20)};
+          playSound(550);
+        } else {
+          snake.pop();
+        }
+
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, 600, 400);
+        ctx.fillStyle = '#ef4444'; ctx.fillRect(food.x*20+2, food.y*20+2, 16, 16);
+        ctx.fillStyle = '#6366f1';
+        snake.forEach(s => ctx.fillRect(s.x*20+2, s.y*20+2, 16, 16));
+        
+        ctx.fillStyle = '#f8fafc'; ctx.font = '14px sans-serif';
+        ctx.fillText(`Score: ${score}`, 15, 25);
+      }, 100);
+    }
+
+    /* --- GAME 3: TILE 2048 --- */
+    function init2048() {
+      titleEl.innerText = "🧩 Tile 2048";
+      let grid = Array(4).fill(0).map(() => Array(4).fill(0));
+      let score = 0;
+
+      function addTile() {
+        let empty = [];
+        for(let r=0; r<4; r++) for(let c=0; c<4; c++) if(!grid[r][c]) empty.push({r,c});
+        if(empty.length) {
+          let spot = empty[Math.floor(Math.random()*empty.length)];
+          grid[spot.r][spot.c] = Math.random() < 0.9 ? 2 : 4;
+        }
+      }
+      addTile(); addTile();
+
+      function slide(row) {
+        let arr = row.filter(val => val);
+        for(let i=0; i<arr.length-1; i++) {
+          if(arr[i] === arr[i+1]) {
+            arr[i] *= 2; score += arr[i]; arr[i+1] = 0;
+            saveScore('2048', score); playSound(400);
+          }
+        }
+        arr = arr.filter(val => val);
+        while(arr.length < 4) arr.push(0);
+        return arr;
+      }
+
+      function move(dir) {
+        for(let i=0; i<dir; i++) {
+          grid = grid[0].map((_, c) => grid.map(row => row[c]).reverse());
+        }
+        for(let r=0; r<4; r++) grid[r] = slide(grid[r]);
+        for(let i=0; i<(4-dir)%4; i++) {
+          grid = grid[0].map((_, c) => grid.map(row => row[c]).reverse());
+        }
+        addTile(); draw();
+      }
+
+      function draw() {
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, 600, 400);
+        for(let r=0; r<4; r++) {
+          for(let c=0; c<4; c++) {
+            let val = grid[r][c];
+            ctx.fillStyle = val ? '#334155' : '#1e293b';
+            ctx.fillRect(160 + c*70, 60 + r*70, 60, 60);
+            if(val) {
+              ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center';
+              ctx.fillText(val, 190 + c*70, 97 + r*70);
+            }
+          }
+        }
+        ctx.textAlign = 'left'; ctx.fillStyle = '#f8fafc'; ctx.font = '14px sans-serif';
+        ctx.fillText(`Score: ${score}`, 15, 25);
+      }
+
+      window.onkeydown = e => {
+        if(e.key==='ArrowLeft') move(0);
+        if(e.key==='ArrowUp') move(3);
+        if(e.key==='ArrowRight') move(2);
+        if(e.key==='ArrowDown') move(1);
+      };
+      draw();
+    }
+
+    /* --- GAME 4: BRICK BREAKER --- */
+    function initBreaker() {
+      titleEl.innerText = "🧱 Brick Breaker";
+      let pX = 250, bX = 300, bY = 200, dx = 3, dy = -3, score = 0;
+      let bricks = [];
+      for(let r=0; r<3; r++) for(let c=0; c<7; c++) bricks.push({x: c*80 + 20, y: r*25 + 35, active: true});
+
+      window.onmousemove = e => {
+        const rect = canvas.getBoundingClientRect();
+        pX = e.clientX - rect.left - 50;
+      };
+
+      loopId = setInterval(() => {
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, 600, 400);
+        bX += dx; bY += dy;
+
+        if (bX < 6 || bX > 594) dx = -dx;
+        if (bY < 6) dy = -dy;
+        if (bY > 370 && bX > pX && bX < pX + 100) { dy = -dy; playSound(350); }
+        if (bY > 400) return launchGame('breaker');
+
+        ctx.fillStyle = '#6366f1'; ctx.fillRect(pX, 380, 100, 10);
+        ctx.fillStyle = '#f8fafc'; ctx.beginPath(); ctx.arc(bX, bY, 5, 0, Math.PI*2); ctx.fill();
+
+        ctx.fillStyle = '#475569';
+        bricks.forEach(b => {
+          if (b.active) {
+            ctx.fillRect(b.x, b.y, 72, 18);
+            if (bX > b.x && bX < b.x+72 && bY > b.y && bY < b.y+18) {
+              b.active = false; dy = -dy; score += 10;
+              saveScore('breaker', score); playSound(500);
+            }
+          }
+        });
+
+        ctx.fillStyle = '#f8fafc'; ctx.font = '14px sans-serif';
+        ctx.fillText(`Score: ${score}`, 15, 25);
+      }, 1000/60);
+    }
+
+    /* --- GAME 5: MEMORY MATCH --- */
+    function initMatch() {
+      titleEl.innerText = "🎴 Memory Match";
+      const icons = ['🚀','🐍','🧩','🧱','🏓','🎮','⭐','💎'];
+      let cards = [...icons, ...icons].sort(() => Math.random() - 0.5);
+      let flipped = [], matched = [], moves = 0;
+
+      function draw() {
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, 600, 400);
+        for(let i=0; i<16; i++) {
+          let r = Math.floor(i/4), c = i%4;
+          let isFlipped = flipped.includes(i) || matched.includes(i);
+          ctx.fillStyle = isFlipped ? '#334155' : '#1e293b';
+          ctx.fillRect(150 + c*75, 40 + r*80, 65, 70);
+          
+          if(isFlipped) {
+            ctx.font = '24px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText(cards[i], 182 + c*75, 83 + r*80);
+          }
+        }
+        ctx.textAlign = 'left'; ctx.fillStyle = '#f8fafc'; ctx.font = '14px sans-serif';
+        ctx.fillText(`Moves: ${moves}`, 15, 25);
+      }
+
+      canvas.onclick = e => {
+        const rect = canvas.getBoundingClientRect();
+        let x = e.clientX - rect.left, y = e.clientY - rect.top;
+        for(let i=0; i<16; i++) {
+          let r = Math.floor(i/4), c = i%4;
+          let cX = 150 + c*75, cY = 40 + r*80;
+          if(x > cX && x < cX+65 && y > cY && y < cY+70 && !flipped.includes(i) && !matched.includes(i)) {
+            if(flipped.length < 2) {
+              flipped.push(i); draw(); playSound(300);
+              if(flipped.length === 2) {
+                moves++;
+                if(cards[flipped[0]] === cards[flipped[1]]) {
+                  matched.push(...flipped); flipped = []; draw(); playSound(600);
+                  if(matched.length === 16) saveScore('match', 100 - moves);
+                } else {
+                  setTimeout(() => { flipped = []; draw(); }, 700);
+                }
+              }
+            }
+          }
+        }
+      };
+      draw();
+    }
+
+    /* --- GAME 6: TABLE TENNIS --- */
+    function initPong() {
+      titleEl.innerText = "🏓 Table Tennis";
+      let pY = 160, aiY = 160, bX = 300, bY = 200, dx = 4, dy = 3, score = 0;
+
+      window.onmousemove = e => {
+        const rect = canvas.getBoundingClientRect();
+        pY = e.clientY - rect.top - 40;
+      };
+
+      loopId = setInterval(() => {
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, 600, 400);
+        bX += dx; bY += dy;
+
+        if (aiY + 40 < bY) aiY += 2.4;
+        else if (aiY + 40 > bY) aiY -= 2.4;
+
+        if (bY < 5 || bY > 395) dy = -dy;
+
+        if (bX < 20 && bY > pY && bY < pY + 80) { 
+          dx = -dx; score += 5; saveScore('pong', score); playSound(400); 
+        }
+        if (bX > 580 && bY > aiY && bY < aiY + 80) { dx = -dx; playSound(400); }
+
+        if (bX < 0 || bX > 600) { bX = 300; bY = 200; score = 0; }
+
+        ctx.fillStyle = '#6366f1'; ctx.fillRect(10, pY, 8, 80);
+        ctx.fillStyle = '#94a3b8'; ctx.fillRect(582, aiY, 8, 80);
+        ctx.fillStyle = '#f8fafc'; ctx.fillRect(bX-3, bY-3, 6, 6);
+
+        ctx.fillStyle = '#f8fafc'; ctx.font = '14px sans-serif';
+        ctx.fillText(`Score: ${score}`, 15, 25);
+      }, 1000/60);
+    }
+  </script>
+</body>
+</html>
